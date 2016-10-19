@@ -7,8 +7,8 @@
     "Josh Abernathy": "josh@github.com"
   },
   "source": {
-    "git": "https://github.com/ReactiveCocoa/ReactiveCocoa.git",
-    "tag": "v2.5"
+    "git": "https://github.com/zintus/ReactiveCocoa.git",
+    "branch" : "v2.5-receiver-is-weak"
   },
   "license": {
     "type": "MIT",
