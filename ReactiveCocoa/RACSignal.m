@@ -21,6 +21,8 @@
 #import "RACSubject.h"
 #import "RACSubscriber+Private.h"
 #import "RACTuple.h"
+#import "RACSlimSubscriber.h"
+#import "RACSlimSignal.h"
 
 @implementation RACSignal
 
@@ -267,6 +269,87 @@
 			[otherDisposable dispose];
 		}];
 	}] setNameWithFormat:@"[%@] -zipWith: %@", self.name, signal];
+}
+
+- (instancetype)map:(id (^)(id))block {
+    NSCParameterAssert(block != nil);
+    
+    return [[RACSlimSignal slimSignalWithSubscribe:^(id<RACSubscriber> subscriber) {
+        NSCParameterAssert(subscriber != nil);
+
+        id<RACSubscriber> mapped = [[RACSlimSubscriber slimSubscriberWrapping:subscriber] withSendNext:^(id x) {
+            [subscriber sendNext:block(x)];
+        }];
+        return [self subscribe:mapped];
+    }] setNameWithFormat:@"[%@] -map:", self.name];
+}
+
+- (instancetype)filter:(BOOL (^)(id))block {
+    NSCParameterAssert(block != nil);
+    
+    return [[RACSlimSignal slimSignalWithSubscribe:^(id<RACSubscriber> subscriber) {
+        NSCParameterAssert(subscriber != nil);
+
+        id<RACSubscriber> filtered = [[RACSlimSubscriber slimSubscriberWrapping:subscriber] withSendNext:^(id x) {
+            if (block(x)) {
+                [subscriber sendNext:x];
+            }
+        }];
+        return [self subscribe:filtered];
+    }] setNameWithFormat:@"[%@] -filter:", self.name];
+}
+
+- (instancetype)distinctUntilChanged {
+    return [[RACSlimSignal slimSignalWithSubscribe:^RACDisposable *(id<RACSubscriber> subscriber) {
+		__block id lastValue = nil;
+		__block BOOL initial = YES;
+
+		RACSlimSubscriber *distinct = [[RACSlimSubscriber slimSubscriberWrapping:subscriber] withSendNext:^(id x) {
+			if (!initial && (lastValue == x || [x isEqual:lastValue])) {
+				return;
+			}
+
+			initial = NO;
+			lastValue = x;
+			return [subscriber sendNext:x];
+		}];
+		return [self subscribe:distinct];
+	}] setNameWithFormat:@"[%@] -distinctUntilChanged", self.name];
+}
+
+- (instancetype)skip:(NSUInteger)skipCount {
+	return [[RACSlimSignal slimSignalWithSubscribe:^RACDisposable *(id<RACSubscriber> subscriber) {
+		__block NSUInteger skipped = 0;
+
+		RACSlimSubscriber *skip = [[RACSlimSubscriber slimSubscriberWrapping:subscriber] withSendNext:^(id x) {
+			if (skipped >= skipCount) {
+				[subscriber sendNext:x];
+			} else {
+				skipped++;
+			}
+		}];
+		return [self subscribe:skip];
+	}] setNameWithFormat:@"[%@] -skip: %lu", self.name, (unsigned long)skipCount];
+}
+
+- (instancetype)take:(NSUInteger)count {
+	return [[RACSlimSignal slimSignalWithSubscribe:^RACDisposable *(id<RACSubscriber> subscriber) {
+		__block NSUInteger taken = 0;
+		__block RACDisposable *selfDisposable = nil;
+
+		RACSlimSubscriber *take = [[RACSlimSubscriber slimSubscriberWrapping:subscriber] withSendNext:^(id x) {
+			if (taken < count) {
+				++taken;
+				[subscriber sendNext:x];
+				if (taken == count) {
+					[subscriber sendCompleted];
+					[selfDisposable dispose];
+				}
+			}
+		}];
+		selfDisposable = [self subscribe:take];
+		return selfDisposable;
+	}] setNameWithFormat:@"[%@] -take: %lu", self.name, (unsigned long)count];
 }
 
 @end
